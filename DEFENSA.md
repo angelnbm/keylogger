@@ -101,6 +101,155 @@ AESGCM(key).decrypt(nonce, ct, b"DriverBooster-v1")
 
 > Si el AAD no coincide al descifrar, `decrypt` lanza `InvalidTag`. Sirve para demostrar que el mensaje no fue alterado.
 
+#### e) "Cambiá AES-256-GCM por ChaCha20-Poly1305"
+
+```go
+// agent.go — reemplazar crypto/aes por golang.org/x/crypto/chacha20poly1305
+import "golang.org/x/crypto/chacha20poly1305"
+
+func enc(pl, ky []byte) ([]byte, error) {
+    aead, err := chacha20poly1305.New(ky)
+    if err != nil { return nil, err }
+    n := make([]byte, aead.NonceSize())
+    rand.Read(n)
+    return append(n, aead.Seal(nil, n, pl, nil)...), nil
+}
+```
+
+```python
+# server.py
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+
+def _decrypt(data, key):
+    nonce, ct = data[:12], data[12:]
+    return ChaCha20Poly1305(key).decrypt(nonce, ct, None).decode("utf-8")
+```
+
+> **Para la defensa**: "ChaCha20 es más rápido que AES en CPUs sin aceleración AES-NI y no tiene vulnerabilidades de canal lateral por software. Google lo usa en TLS y es el método más común en dispositivos móviles."
+
+#### f) "Cambiá GCM por CTR + HMAC (sin tag automático)"
+
+```go
+// agent.go — CTR no autentica, hay que agregar HMAC manualmente
+import "crypto/hmac"
+import "crypto/sha256"
+
+func enc(pl, ky []byte) ([]byte, error) {
+    b, _ := aes.NewCipher(ky)
+    iv := make([]byte, aes.BlockSize)
+    rand.Read(iv)
+    ctr := cipher.NewCTR(b, iv)
+    dst := make([]byte, len(pl))
+    ctr.XORKeyStream(dst, pl)
+    // HMAC-SHA256 sobre iv + ciphertext para autenticar
+    mac := hmac.New(sha256.New, ky)
+    mac.Write(iv)
+    mac.Write(dst)
+    tag := mac.Sum(nil)
+    return append(append(iv, dst...), tag...), nil
+}
+```
+
+```python
+# server.py
+import hmac, hashlib
+
+def _decrypt(data, key):
+    iv, ct, tag = data[:16], data[16:-32], data[-32:]
+    expected = hmac.new(key, iv + ct, hashlib.sha256).digest()
+    if not hmac.compare_digest(tag, expected):
+        raise ValueError("MAC mismatch")
+    c = Cipher(algorithms.AES(key), modes.CTR(iv))
+    return c.decryptor().update(ct).decode("utf-8")
+```
+
+> **Para la defensa**: "CTR es un modo de flujo (no necesita padding) pero NO autentica. Hay que agregar HMAC manualmente. GCM ya incluye autenticación integrada, por eso lo elegimos."
+
+#### g) "Usá RSA para intercambiar la clave AES (cifrado híbrido)"
+
+```python
+# server.py — generar par RSA y enviar clave pública
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import serialization
+
+# En el servidor:
+private_key = rsa.generate_private_key(65537, 2048)
+public_pem = private_key.public_key().public_bytes(
+    serialization.Encoding.PEM,
+    serialization.PublicFormat.SubjectPublicKeyInfo
+)
+# Servir public_pem por HTTP al agente al conectarse
+```
+
+```go
+// agent.go — al iniciar, pedir clave pública RSA y cifrar clave AES con ella
+import "crypto/rsa"
+import "crypto/x509"
+
+// 1. HTTP GET a server/clave → obtiene PEM con clave pública RSA
+// 2. Genera clave AES-256 aleatoria
+// 3. La cifra con RSA:
+//    encAES, _ := rsa.EncryptOAEP(sha256.New(), rand.Reader, pubKey, aesKey, nil)
+// 4. Envía encAES al servidor
+// 5. Servidor descifra con RSA privada → obtiene AES key
+// 6. Toda la comunicación subsecuente usa esa AES key efímera
+```
+
+> **Para la defensa**: "Este es el método PROFESIONAL. La clave AES viaja cifrada con RSA en cada ejecución. Ninguna clave está hardcodeada en el binario. Si analizan el .exe, no encuentran ninguna clave — solo la clave pública RSA, que solo sirve para cifrar."
+
+#### h) "Derivá la clave desde una passphrase con KDF"
+
+```go
+// agent.go — en vez de clave hardcodeada, derivar desde passphrase
+import "golang.org/x/crypto/pbkdf2"
+import "crypto/sha256"
+
+func main() {
+    pass := []byte("DriverBooster-Secret-2026")
+    salt := []byte("DbSalt2026!")
+    // PBKDF2 con 600000 iteraciones
+    jk := pbkdf2.Key(pass, salt, 600000, 32, sha256.New)
+    // jk es la clave AES-256 derivada
+}
+```
+
+```python
+# server.py
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+passwd = b"DriverBooster-Secret-2026"
+salt = b"DbSalt2026!"
+kdf = PBKDF2HMAC(hashlib.sha256(), 32, salt, 600000)
+key = kdf.derive(passwd)
+```
+
+> **Para la defensa**: "PBKDF2 hace que derivar la clave desde la passphrase sea computacionalmente costoso (600k iteraciones). Si un atacante obtiene el binario, extraer la passphrase no es suficiente — necesita las iteraciones. Argon2id es aún mejor pero requiere librería externa."
+
+#### i) "Usá ECDH (X25519) para Perfect Forward Secrecy"
+
+```go
+// agent.go — intercambio de claves efímeras por curva elíptica
+import "golang.org/x/crypto/curve25519"
+
+func handshake(conn net.Conn) []byte {
+    // 1. Generar par efímero
+    ephemeral := make([]byte, 32)
+    rand.Read(ephemeral)
+    public, _ := curve25519.X25519(ephemeral, curve25519.Basepoint)
+    // 2. Enviar clave pública efímera al servidor
+    conn.Write(public)
+    // 3. Recibir clave pública del servidor
+    serverPub := make([]byte, 32)
+    conn.Read(serverPub)
+    // 4. Calcular secreto compartido
+    shared, _ := curve25519.X25519(ephemeral, serverPub)
+    // 5. Derivar clave AES con HKDF
+    return hkdfSHA256(shared)
+}
+```
+
+> **Para la defensa**: "ECDH con X25519 da Perfect Forward Secrecy: aunque un atacante capture la clave privada del servidor mañana, no puede descifrar el tráfico de hoy. Es el estándar en TLS 1.3."
+
 ### Qué decir en la defensa
 
 > "Usamos AES-256-GCM porque es cifrado simétrico AUTENTICADO: garantiza confidencialidad (nadie sin la clave lee el mensaje) e integridad (el tag detecta alteraciones). La clave está embebida por simplicidad académica; en producción usaríamos ECDH (X25519) para intercambio de claves con Perfect Forward Secrecy."
