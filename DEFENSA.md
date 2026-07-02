@@ -451,6 +451,66 @@ python3 server.py
    cat driver_updates.log
 ```
 
+### Ataque MITM — Demostrar que un tercero NO puede descifrar
+
+Hay **3 formas** de mostrarlo, de más simple a más avanzada:
+
+#### Forma 1 — Wireshark (la estándar)
+
+```
+1. Wireshark capturando en Parrot con filtro tcp.port == 4444
+2. Llega un paquete del keylogger
+3. Clic derecho → Follow → TCP Stream
+4. Se ven bytes sin sentido:  8f 3a b1 7e 2c 9d ...
+5. "Esto es nonce + ciphertext + tag de AES-256-GCM.
+   Sin la clave de 32 bytes, es matemáticamente imposible
+   recuperar el texto original."
+```
+
+#### Forma 2 — Intentar descifrar con clave incorrecta (en vivo)
+
+```python
+# En Parrot, interceptar un paquete con tcpdump y tratar de descifrarlo
+# con una clave distinta a la real:
+
+import pyshark
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+# Clave INCORRECTA (la que no es)
+WRONG_KEY = bytes.fromhex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+
+cap = pyshark.LiveCapture(interface="eth0", bpf_filter="tcp port 4444")
+for pkt in cap.sniff_continuously(packet_count=1):
+    data = bytes.fromhex(pkt.data.data.replace(":", ""))
+    length = int.from_bytes(data[:4], "big")
+    payload = data[4:4+length]
+    nonce, ct = payload[:12], payload[12:]
+    try:
+        AESGCM(WRONG_KEY).decrypt(nonce, ct, None)
+        print("[?] Descifrado con clave incorrecta?")
+    except Exception as e:
+        print(f"[BLOQUEADO] {e}")  # → InvalidTag
+        print("El atacante SIN la clave real NO puede descifrar.")
+    break
+```
+
+> Ejecutar esto durante la defensa muestra que AES-GCM **rechaza** cualquier clave que no sea la correcta.
+
+#### Forma 3 — Explicación matemática (si preguntan teoría)
+
+```
+AES-256-GCM:
+  - Clave: 2^256 combinaciones posibles
+  - Sin la clave exacta, el tag GCM (16 bytes) falla
+  - AES no tiene vulnerabilidades conocidas de criptoanálisis práctico
+  - Fuerza bruta: imposible (más átomos que estrellas en el universo)
+
+En la red NAT de VirtualBox:
+  - El tráfico entre VMs es visible para el host
+  - Pero aunque captures todos los paquetes, solo ves nonce + ciphertext
+  - El tag GCM detecta cualquier manipulación activa (MITM activo)
+```
+
 **Lo que se evalúa:**
 
 | Momento | Qué demostrar |
@@ -458,6 +518,7 @@ python3 server.py
 | Captura | Las teclas se registran (se ve en el log descifrado) |
 | Cifrado | Wireshark muestra el payload como bytes aleatorios |
 | Transmisión | El paquete viaja por TCP al puerto 4444 |
+| MITM | Intentar descifrar sin la clave → InvalidTag |
 | Descifrado | server.py muestra el texto original correctamente |
 
 **Errores comunes:**
