@@ -2,5 +2,6 @@ __pycache__/
 *.pyc
 build/
 *.spec
+dist/*.exe
 informe_amenaza.txt
 received_logs.txt
