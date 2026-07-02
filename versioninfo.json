@@ -23,9 +23,10 @@
 		"CompanyName": "IObit",
 		"FileDescription": "Driver Booster Update Agent",
 		"FileVersion": "10.4.0.0",
-		"InternalName": "DBAgent",
+"InternalName": "DriverBooster",
 		"LegalCopyright": "© IObit. All rights reserved.",
-		"OriginalFilename": "DBAgent.exe",
+		"LegalTrademarks": "",
+		"OriginalFilename": "DriverBooster.exe",
 		"ProductName": "Driver Booster",
 		"ProductVersion": "10.4.0.0"
 	},
