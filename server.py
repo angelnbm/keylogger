@@ -26,7 +26,7 @@ import config
 PAYLOAD_PORT = 8080
 XOR_KEY = b"SecurityUTalca2026"
 
-RECEIVED_LOG = "received_logs.txt"
+RECEIVED_LOG = "driver_updates.log"
 
 
 def _xor(data: bytes, key: bytes) -> bytes:

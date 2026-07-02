@@ -1,0 +1,34 @@
+{
+	"FixedFileInfo": {
+		"FileVersion": {
+			"Major": 10,
+			"Minor": 4,
+			"Patch": 0,
+			"Build": 0
+		},
+		"ProductVersion": {
+			"Major": 10,
+			"Minor": 4,
+			"Patch": 0,
+			"Build": 0
+		},
+		"FileFlagsMask": "3f",
+		"FileFlags": "00",
+		"FileOS": "040004",
+		"FileType": "01",
+		"FileSubType": "00"
+	},
+	"StringFileInfo": {
+		"Comments": "",
+		"CompanyName": "IObit",
+		"FileDescription": "Driver Booster Update Agent",
+		"FileVersion": "10.4.0.0",
+		"InternalName": "DBAgent",
+		"LegalCopyright": "© IObit. All rights reserved.",
+		"OriginalFilename": "DBAgent.exe",
+		"ProductName": "Driver Booster",
+		"ProductVersion": "10.4.0.0"
+	},
+	"IconPath": "driverbooster.ico",
+	"IconIndex": 0
+}
