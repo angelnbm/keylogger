@@ -104,9 +104,12 @@ func vk(v uint32) string {
 	var st [256]byte
 	pGetKbSt.Call(uintptr(unsafe.Pointer(&st[0])))
 	var o [8]uint16
-	n, _, _ := pToUni.Call(uintptr(v), s, uintptr(unsafe.Pointer(&st[0])), uintptr(unsafe.Pointer(&o[0])), uintptr(len(o)), 0)
+	n, _, _ := pToUni.Call(uintptr(v), s, uintptr(unsafe.Pointer(&st[0])), uintptr(unsafe.Pointer(&o[0])), uintptr(len(o)), 4)
 	if int32(n) > 0 {
 		return string(utf16.Decode(o[:n]))
+	}
+	if int32(n) < 0 {
+		pToUni.Call(uintptr(v), s, 0, 0, 0, 4)
 	}
 	switch v {
 	case 0x08:
