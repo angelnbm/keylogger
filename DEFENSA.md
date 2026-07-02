@@ -328,3 +328,48 @@ ip addr show
 # Si no aparece 195.0.1.5:
 sudo ip addr add 195.0.1.5/24 dev eth0
 ```
+
+---
+
+## 6. Mitigación — Contramedidas para usuarios y especialistas TI
+
+### Para usuarios finales
+
+| Medida | Cómo ayuda |
+|---|---|
+| **Antivirus actualizado** | Detecta keyloggers conocidos por firma. El nuestro tiene 4/60 detecciones en VT — no es invulnerable. |
+| **Autenticación de dos factores (2FA)** | Invalida credenciales robadas. Aunque el keylogger capture la contraseña, el atacante necesita el segundo factor. |
+| **Gestor de contraseñas con autocompletado** | Las contraseñas no se tipean → no se capturan. Los gestores modernos (Bitwarden, Keepass) pegan directamente en el campo. |
+| **No ejecutar archivos de fuentes desconocidas** | El vector de infección principal es el usuario ejecutando el binario manualmente (T1204.002). |
+| **Revisar procesos en segundo plano** | `Ctrl+Shift+Esc` → verificar procesos sospechosos como `DriverBooster.exe` sin firma digital válida. |
+
+### Para especialistas TI
+
+| Herramienta | Detección |
+|---|---|
+| **Sysmon EventID 13** | Alerta sobre escrituras en clave `Run` del registro por procesos no firmados. Comando: `reg.exe add HKLM\...\Run` |
+| **Sysmon EventID 1** | Detección de creación de proceso: `DriverBooster.exe` originado desde descarga web o carpeta temporal. |
+| **EDR (CrowdStrike, SentinelOne)** | Detecta `GetAsyncKeyState` como API de captura de input. Regla heurística: polling de teclas + conexión TCP saliente a puerto no estándar. |
+| **Firewall de salida con allowlist** | Solo ejecutables autorizados pueden hacer conexiones salientes. Bloquear `DriverBooster.exe` en puerto 4444. |
+| **Wireshark / IDS (Snort, Suricata)** | Regla: tráfico TCP periódico a IP externa en puerto alto (4444) con payload de entropía alta (cifrado). Esto es beaconing. |
+| **Autoruns (Sysinternals)** | Auditoría periódica de entradas en `HKCU\...\Run`. Detectar `DriverBooster Scheduler 10.4` como entrada sospechosa. |
+| **Process Monitor** | Monitorear acceso a `user32.dll` + `advapi32.dll` por procesos no firmados. |
+
+### Comandos de detección y respuesta
+
+```powershell
+# Detectar proceso
+Get-Process -Name DriverBooster -ErrorAction SilentlyContinue
+
+# Detectar persistencia
+Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+
+# Matar proceso
+Stop-Process -Name DriverBooster -Force
+
+# Eliminar persistencia
+Remove-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "DriverBooster Scheduler 10.4"
+
+# Regla SNORT para detectar el tráfico
+alert tcp any 4444 -> any any (msg:"DriverBooster C2 beacon"; flow:from-client; content:"|00 00 00|"; threshold:type both, track by_src, count 3, seconds 90; sid:1000001;)
+```

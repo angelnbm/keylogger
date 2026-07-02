@@ -110,7 +110,18 @@ Técnicas aplicadas para bajar de 9 a 4:
 
 ---
 
-## 10. Resumen de trade-offs
+## 10. Limitaciones: qué información NO se captura y por qué
+
+| Información | Por qué no se captura |
+|---|---|
+| **Campos de contraseña en navegadores** | Los navegadores modernos (Chrome, Edge) procesan campos `type=password` a nivel de renderizado interno y no generan eventos de teclado estándar accesibles desde un hook de usuario. Algunos además usan procesos aislados con sandboxing que bloquean hooks externos. |
+| **Texto pegado con Ctrl+V** | El portapapeles no genera eventos de teclado. Ctrl+V dispara VK_CONTROL y VK_V, pero el texto pegadoviene de memoria interna del navegador/aplicación, no de pulsaciones de teclas individuales. |
+| **Teclado en pantalla (OSK)** | El teclado en pantalla de Windows genera eventos de puntero (ratón/táctil), no eventos de teclado. `GetAsyncKeyState` no detecta estas entradas porque no pasan por el controlador de teclado físico. |
+| **Juegos con DirectInput / RawInput** | Muchos juegos modernos leen el teclado directamente desde el dispositivo (`Raw Input API`)bypaseando la capa de teclado virtual de Windows. `GetAsyncKeyState` lee el estado del teclado virtual, no el dispositivo físico. |
+| **Caracteres compuestos (acentos)** | En layouts con teclas muertas (ej. español: ' + a = á), `ToUnicode` debe procesar secuencias de dos teclas consecutivas. El polling puede perder la tecla muerta antes de recibir la vocal, resultando en caracteres incompletos. |
+| **Alt+numpad** | Los caracteres ingresados con Alt+código numérico (ej. Alt+164 = ñ) se componen a bajo nivel y no generan eventos de teclado individuales para cada carácter. |
+
+## 11. Resumen de trade-offs
 
 | Decisión | Ganancia | Pérdida |
 |---|---|---|
